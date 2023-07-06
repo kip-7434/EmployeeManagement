@@ -1,7 +1,11 @@
 using June.models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc.Authorization;
+using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -33,7 +37,54 @@ namespace June
                      {
                          sqlServerOptions.EnableRetryOnFailure();
                          }));
-            services.AddMvc(option => option.EnableEndpointRouting=false);
+
+            services.AddIdentity<ApplicationUser, IdentityRole>(options =>
+            {
+                options.Password.RequiredLength = 3;
+                options.Password.RequiredUniqueChars = 1;
+                options.SignIn.RequireConfirmedEmail = true;
+            })
+                .AddEntityFrameworkStores<AppDbContext>()
+                .AddDefaultTokenProviders();
+
+            
+
+            services.AddMvc(option => option.EnableEndpointRouting = false);
+            services.AddMvc(options =>
+            {
+                var policy = new AuthorizationPolicyBuilder()
+                                .RequireAuthenticatedUser()
+                                .Build();
+                options.Filters.Add(new AuthorizeFilter(policy));
+            }).AddXmlSerializerFormatters();
+
+            services.AddAuthentication().AddGoogle(options =>
+            {
+                    options.ClientId = " 888856716115 - g8c1a1j23bi6vv3cse6bhvao65ok4bhn.apps.googleusercontent.com";
+
+                    options.ClientSecret = "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";
+                });
+
+            //lifspan of confirmation link
+            services.Configure < DataProtectionTokenProviderOptions>(o =>
+                o.TokenLifespan = TimeSpan.FromHours(5));
+
+            //change access denied route
+            //services.ConfigureApplicationCookie(options =>
+            //{
+            //    options.AccessDeniedPath = new PathString("/Administration/AccessDenied");
+            //});
+
+            //creating and registering claims policy
+            services.AddAuthorization(options =>
+            {
+                options.AddPolicy("DeleteRolePolicy",
+                    policy => policy.RequireClaim("Delete Role")
+                   .RequireClaim("Create Role") );
+                options.AddPolicy("EditRolePolicy",
+                    policy => policy.RequireClaim("Edit Role"));
+            });
+
             services.AddScoped<IEmployeeRepository, SQLEmployeeRepository>();
         }
 
@@ -49,12 +100,17 @@ namespace June
            
             app.UseStaticFiles();
             //app.UseMvcWithDefaultRoute();
-            app.UseMvc(routes =>
+            app.UseAuthentication();
+            app.UseMvc( routes =>
             {
                 routes.MapRoute("default", "{controller=Home}/{action=Index}/{id?}");
 
             });
         }
+    }
+
+    internal class AuthorizationFilter : IFilterMetadata
+    {
     }
 }
   
